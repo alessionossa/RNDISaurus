@@ -1,0 +1,62 @@
+//
+//  RNDISaurusDiagnosticsService.iig
+//  RNDISaurus — USB tethering driver for RNDIS devices on macOS
+//
+//  Copyright (C) 2026 N4H4
+//  SPDX-License-Identifier: MPL-2.0
+//
+//  This Source Code Form is subject to the terms of the Mozilla Public License,
+//  v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain
+//  one at https://mozilla.org/MPL/2.0/.
+//
+
+#ifndef RNDISaurusDiagnosticsService_h
+#define RNDISaurusDiagnosticsService_h
+
+#include <Availability.h>
+#include <DriverKit/IOService.iig>
+#include <DriverKit/IODispatchQueue.iig>
+
+#include "RNDISaurusDriver.iig"
+
+// The service the host app opens for diagnostics. The driver itself is an
+// IOUserNetworkEthernet, whose kernel-side class answers IOServiceOpen on its own and
+// never forwards it to the dext, so the driver creates this plain IOService child (kernel
+// class IOUserService, which does forward) from the personality's
+// DiagnosticsServiceProperties dictionary and publishes it as soon as USB is set up,
+// before the RNDIS bring-up: a failing bring-up can then still be inspected.
+//
+// The child holds the driver and the driver's default dispatch queue for the user
+// clients it creates (RNDISaurusDiagnosticsUserClient).
+class RNDISaurusDiagnosticsService: public IOService
+{
+public:
+    virtual bool
+    init() override;
+
+    virtual void
+    free() override;
+
+    virtual kern_return_t
+    Start(IOService * provider) override;
+
+    virtual kern_return_t
+    Stop(IOService * provider) override;
+
+    // An application called IOServiceOpen on this service: creates a diagnostics user
+    // client from the UserClientProperties dictionary.
+    virtual kern_return_t
+    NewUserClient(uint32_t type, IOUserClient ** userClient) override;
+
+    // Called by the driver right after Create, before RegisterService: retains the
+    // driver and the queue its state lives on.
+    void
+    SetDriver(RNDISaurusDriver * driver, IODispatchQueue * driverQueue) LOCALONLY;
+
+    // Hands out retained references to the driver and its queue for a user client;
+    // kIOReturnNotReady before SetDriver.
+    kern_return_t
+    CopyDriver(RNDISaurusDriver ** driver, IODispatchQueue ** driverQueue) LOCALONLY;
+};
+
+#endif /* RNDISaurusDiagnosticsService_h */

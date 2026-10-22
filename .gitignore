@@ -77,3 +77,10 @@ playground.xcworkspace
 
 # Swift Package Manager
 # Package.resolved
+
+# Obsidian Vault
+ObsidianPM/
+
+### RNDISaurus
+# Machine-local signing settings (DEVELOPMENT_TEAM) — see Configs/Local.xcconfig.template
+Configs/Local.xcconfig

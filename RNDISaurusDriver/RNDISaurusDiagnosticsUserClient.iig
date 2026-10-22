@@ -1,0 +1,60 @@
+//
+//  RNDISaurusDiagnosticsUserClient.iig
+//  RNDISaurus — USB tethering driver for RNDIS devices on macOS
+//
+//  Copyright (C) 2026 N4H4
+//  SPDX-License-Identifier: MPL-2.0
+//
+//  This Source Code Form is subject to the terms of the Mozilla Public License,
+//  v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain
+//  one at https://mozilla.org/MPL/2.0/.
+//
+//  Declarations follow Apple's DriverKitUserClientSample (Copyright © 2025 Apple
+//  Inc., MIT; notice in NOTICE.md).
+//
+
+#ifndef RNDISaurusDiagnosticsUserClient_h
+#define RNDISaurusDiagnosticsUserClient_h
+
+#include <Availability.h>
+#include <DriverKit/IOUserClient.iig>
+
+// The host app's read-only window into one matched device. Created by
+// RNDISaurusDiagnosticsService::NewUserClient when the app calls IOServiceOpen on that
+// child service; its single external method copies the driver's state and counters into
+// an RNDISaurusSnapshot (RNDISaurusDiagnostics.h). The method runs on the driver's own
+// dispatch queue, so it reads the driver's variables the way every other part of the
+// driver does: serialized, without locks.
+class RNDISaurusDiagnosticsUserClient: public IOUserClient
+{
+public:
+    virtual bool
+    init() override;
+
+    virtual void
+    free() override;
+
+    virtual kern_return_t
+    Start(IOService * provider) override;
+
+    virtual kern_return_t
+    Stop(IOService * provider) override;
+
+    // Entry point of every IOConnectCall*Method from the app; validates the selector
+    // and lets the superclass check the argument sizes against the dispatch table.
+    virtual kern_return_t
+    ExternalMethod(uint64_t selector, IOUserClientMethodArguments * arguments,
+                   const IOUserClientMethodDispatch * dispatch, OSObject * target,
+                   void * reference) override;
+
+protected:
+    // The dispatch table calls the static trampoline, which forwards to Snapshot.
+    static kern_return_t
+    StaticSnapshot(OSObject * target, void * reference,
+                   IOUserClientMethodArguments * arguments) LOCALONLY;
+
+    kern_return_t
+    Snapshot(IOUserClientMethodArguments * arguments) LOCALONLY;
+};
+
+#endif /* RNDISaurusDiagnosticsUserClient_h */

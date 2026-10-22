@@ -1,0 +1,125 @@
+//
+//  RNDISaurusDriver.iig
+//  RNDISaurus — USB tethering driver for RNDIS devices on macOS
+//
+//  Copyright (C) 2026 N4H4
+//  SPDX-License-Identifier: MPL-2.0
+//
+//  This Source Code Form is subject to the terms of the Mozilla Public License,
+//  v. 2.0. If a copy of the MPL was not distributed with this file, You can obtain
+//  one at https://mozilla.org/MPL/2.0/.
+//
+//  The network-interface declarations follow Apple's NetworkingDriverKitSample
+//  (Copyright © 2025 Apple Inc., MIT; notice in NOTICE.md).
+//
+
+#ifndef RNDISaurusDriver_h
+#define RNDISaurusDriver_h
+
+#include <Availability.h>
+#include <DriverKit/IOService.iig>
+#include <DriverKit/IOTimerDispatchSource.iig>
+#include <DriverKit/OSAction.iig>
+#include <NetworkingDriverKit/IOUserNetworkEthernet.iig>
+// Declares IOUSBHostPipe to iig: the completion handlers below are typed by its
+// CompleteAsyncIO.
+#include <USBDriverKit/IOUSBHostPipe.iig>
+
+// Matches an RNDIS control interface (see the IOKitPersonalities in Info.plist) and
+// opens it together with the companion CDC-Data interface. The RNDIS control plane
+// (INITIALIZE, query of the permanent MAC address, packet-filter SET) is brought up
+// over the default control endpoint after Start has returned, and retried after a
+// RESET with a back-off for as long as the device stays attached; once it is up an
+// Ethernet interface is published whose frames travel as REMOTE_NDIS_PACKET_MSG over
+// the bulk pipes. The control interface's interrupt endpoint is read continuously so
+// that device-initiated messages (media connect/disconnect, KEEPALIVE) are handled
+// between commands. Diagnostics (device identity, bring-up state, counters, last error)
+// are read by the host app through a RNDISaurusDiagnosticsService child of this service
+// and its RNDISaurusDiagnosticsUserClient.
+//
+// Several IOUserNetworkEthernet overrides take argument types the SDK marks deprecated,
+// and iig repeats those types in the code it generates for this class, so
+// -Wdeprecated-declarations is switched off around the class rather than per method.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+class RNDISaurusDriver: public IOUserNetworkEthernet
+{
+public:
+    virtual bool
+    init() override;
+
+    virtual void
+    free() override;
+
+    virtual kern_return_t
+    Start(IOService * provider) override;
+
+    virtual kern_return_t
+    Stop(IOService * provider) override;
+
+    // System sleep/wake and device power changes; logged, then passed to super.
+    virtual kern_return_t
+    SetPowerState(uint32_t powerFlags) override;
+
+    // Interface control from the network stack (ifconfig up/down and its settings).
+    virtual kern_return_t
+    SetInterfaceEnable(bool isEnable) override;
+
+    virtual kern_return_t
+    SetPromiscuousModeEnable(bool enable) override;
+
+    virtual kern_return_t
+    SetMulticastAddresses(const IOUserNetworkMACAddress * addresses, uint32_t count) override;
+
+    virtual kern_return_t
+    SetAllMulticastModeEnable(bool enable) override;
+
+    virtual kern_return_t
+    SelectMediaType(IOUserNetworkMediaType mediaType) override;
+
+    virtual kern_return_t
+    SetWakeOnMagicPacketEnable(bool enable) override;
+
+    virtual kern_return_t
+    SetMTU(uint32_t mtu) override;
+
+    virtual kern_return_t
+    GetMaxTransferUnit(uint32_t * mtu) override;
+
+    virtual kern_return_t
+    SetHardwareAssists(uint32_t hardwareAssists) override;
+
+    virtual kern_return_t
+    GetHardwareAssists(uint32_t * hardwareAssists) override;
+
+    // The stack placed frames on the transmit submission queue.
+    virtual void
+    TxPacketAvailable(OSAction * action) TYPE(IODataQueueDispatchSource::DataAvailable);
+
+    // A bulk IN transfer (device to host) finished; the action's reference holds the
+    // receive slot index.
+    virtual void
+    BulkInComplete(OSAction * action, IOReturn status, uint32_t actualByteCount,
+                   uint64_t completionTimestamp) TYPE(IOUSBHostPipe::CompleteAsyncIO);
+
+    // A bulk OUT transfer (host to device) finished; the action's reference holds the
+    // transmit slot index.
+    virtual void
+    BulkOutComplete(OSAction * action, IOReturn status, uint32_t actualByteCount,
+                    uint64_t completionTimestamp) TYPE(IOUSBHostPipe::CompleteAsyncIO);
+
+    // An interrupt IN transfer on the control interface finished: a
+    // RESPONSE_AVAILABLE notification, or an error.
+    virtual void
+    InterruptComplete(OSAction * action, IOReturn status, uint32_t actualByteCount,
+                      uint64_t completionTimestamp) TYPE(IOUSBHostPipe::CompleteAsyncIO);
+
+    // The bring-up timer fired: run the next RNDIS bring-up attempt.
+    virtual void
+    BringUpTimerFired(OSAction * action, uint64_t time) TYPE(IOTimerDispatchSource::TimerOccurred);
+};
+
+#pragma clang diagnostic pop
+
+#endif /* RNDISaurusDriver_h */
